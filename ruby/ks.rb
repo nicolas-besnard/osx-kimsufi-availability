@@ -1,4 +1,23 @@
+require 'observer'
+require 'httparty'
+require 'terminal-notifier'
+
+class Notifier
+	def update(now_available, now_sold_out)
+		if !now_available.empty?
+			puts "  -- Now Available #{now_available}"
+			TerminalNotifier.notify("Server Now Available #{now_available}", title: 'Kimsufi', open: 'https://www.kimsufi.com/fr/index.xml')
+		end
+
+		if !now_sold_out.empty?
+			puts "  -- Now Sold Out #{now_sold_out}"
+			TerminalNotifier.notify("Server Sold Out #{now_sold_out}", title: 'Kimsufi', open: 'https://www.kimsufi.com/fr/index.xml')
+		end
+	end
+end
+
 class Checker
+	include Observable
 
 	URL = 'https://ws.ovh.com/dedicated/r2/ws.dispatcher/getAvailability2'
 	MODELS = {
@@ -10,7 +29,6 @@ class Checker
 
 	def initialize
 		init_instance_variable
-		do_
 	end
 
 	def do_
@@ -37,15 +55,10 @@ class Checker
 
 			if now_available.empty? && now_sold_out.empty?
 				puts "[#{Time.now}] No New Server :("
-			end
-
-			if !now_available.empty?
-				puts "Now Available #{now_available}"
+			else !now_available.empty? || !now_sold_out.empty?
+				changed
+				notify_observers(now_available, now_sold_out)
 				now_available.clear
-			end
-
-			if !now_sold_out.empty?
-				puts "Now Sold Out #{now_sold_out}"
 				now_sold_out.clear
 			end
 
@@ -73,3 +86,8 @@ class Checker
 end
 
 c = Checker.new
+notifier = Notifier.new
+c.add_observer(notifier)
+
+c.do_
+
