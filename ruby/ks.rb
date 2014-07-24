@@ -16,16 +16,45 @@ class Notifier
 	end
 end
 
-class Checker
-	include Observable
-
-	URL = 'https://ws.ovh.com/dedicated/r2/ws.dispatcher/getAvailability2'
+class ModelCollection
 	MODELS = {
 		ks_1: '142sk9',
 		ks_2: '142sk2',
 		ks_3: '142sk3',
-		ks_4: '142sk4'
+		ks_4: '142sk4',
+		ks_5a: '142sk5',
+		ks_5b: '142sk8',
+		ks_6: '142sk6'
 	}
+end
+
+class LastDelivery
+	URL = 'https://ws.ovh.com/dedicated/r2/ws.dispatcher/getElapsedTimeSinceLastDelivery'
+
+	def check
+		ModelCollection::MODELS.each do |model, reference|
+			gamme = {gamme: reference}.to_json
+			response = HTTParty.get(URL, query: { params: gamme })
+
+			if time = response['answer']
+				puts "#{model.to_s} : #{date_since_elapsed_time(time.to_i)}"
+			end
+		end
+	end
+
+	private
+
+	def date_since_elapsed_time(time)
+		Time.at(Time.now.to_i - time.to_i).strftime('%d/%m/%y - %H:%M')
+	end
+
+end
+
+class Checker
+	include Observable
+
+	URL = 'https://ws.ovh.com/dedicated/r2/ws.dispatcher/getAvailability2'
+
 
 	def initialize
 		init_instance_variable
@@ -36,11 +65,22 @@ class Checker
 		now_sold_out = []
 
 		loop do
-			response = HTTParty.get(URL)
+			begin
+				response = HTTParty.get(URL, timeout: 20)
+			rescue Errno::ECONNREFUSED => e
+				puts "  -- Request TimeOut #{e.inspect}"
+				next
+			rescue
+				next
+			end
 
-			MODELS.each do |model, reference|
+			ModelCollection::MODELS.each do |model, reference|
 
-				count = check_availability(response['answer']['availability'], reference)
+				begin
+					count = check_availability(response['answer']['availability'], reference)
+				rescue
+					break
+				end
 
 				if instance_variable_get("@#{model.to_s}") != count
 					if count == 0
@@ -71,7 +111,7 @@ class Checker
 
 	def init_instance_variable
 		response = HTTParty.get(URL)
-		MODELS.each do |model, reference|
+		ModelCollection::MODELS.each do |model, reference|
 			count = check_availability(response['answer']['availability'], reference)
 			instance_variable_set("@#{model.to_s}", count)
 		end
@@ -91,3 +131,5 @@ c.add_observer(notifier)
 
 c.do_
 
+# ld = LastDelivery.new
+# ld.check
