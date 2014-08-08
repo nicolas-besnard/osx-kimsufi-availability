@@ -1,6 +1,40 @@
 require 'observer'
 require 'httparty'
 require 'terminal-notifier'
+require 'dotenv'
+require 'twitter'
+
+require './model_collection.rb'
+
+Dotenv.load
+
+class TweetNotifier
+
+	def update(now_available, now_sold_out)
+		if !now_available.empty?
+			puts "  -- Now Available #{now_available}"
+			init_client.update("Now Available #{now_available} #kimsufi")
+		end
+
+		if !now_sold_out.empty?
+			puts "  -- Now Sold Out #{now_sold_out}"
+			init_client.update("Sold Out #{now_sold_out} #kimsufi")
+			TerminalNotifier.notify("Server Sold Out #{now_sold_out}", title: 'Kimsufi', open: 'https://www.kimsufi.com/fr/index.xml')
+		end
+	end
+
+	def init_client
+
+		Twitter::REST::Client.new do |config|
+			config.consumer_key        = ENV['CONSUMER_KEY']
+			config.consumer_secret     = ENV['CONSUMER_SECRET']
+			config.access_token        = ENV['ACCESS_TOKEN']
+			config.access_token_secret = ENV['ACCESS_TOKEN_SECRET']
+		end
+
+	end
+
+end
 
 class Notifier
 	def update(now_available, now_sold_out)
@@ -16,39 +50,6 @@ class Notifier
 	end
 end
 
-class ModelCollection
-	MODELS = {
-		ks_1: '142sk9',
-		ks_2: '142sk2',
-		ks_3: '142sk3',
-		ks_4: '142sk4',
-		ks_5a: '142sk5',
-		ks_5b: '142sk8',
-		ks_6: '142sk6'
-	}
-end
-
-class LastDelivery
-	URL = 'https://ws.ovh.com/dedicated/r2/ws.dispatcher/getElapsedTimeSinceLastDelivery'
-
-	def check
-		ModelCollection::MODELS.each do |model, reference|
-			gamme = {gamme: reference}.to_json
-			response = HTTParty.get(URL, query: { params: gamme })
-
-			if time = response['answer']
-				puts "#{model.to_s} : #{date_since_elapsed_time(time.to_i)}"
-			end
-		end
-	end
-
-	private
-
-	def date_since_elapsed_time(time)
-		Time.at(Time.now.to_i - time.to_i).strftime('%d/%m/%y - %H:%M')
-	end
-
-end
 
 class Checker
 	include Observable
@@ -127,9 +128,13 @@ end
 
 c = Checker.new
 notifier = Notifier.new
+tweet_notifier = TweetNotifier.new
 c.add_observer(notifier)
+c.add_observer(tweet_notifier)
 
 c.do_
+
+
 
 # ld = LastDelivery.new
 # ld.check
